@@ -18,7 +18,6 @@ We can start building our EC2 instances in an autoscaling group with load balanc
 1.	First step is to create an EC2 instance and install ansible on it. Ubuntu free-tier AMI was chosen for this. This instance will serve as the master node from which changes can be pushed to all EC2 instances once they are created.
 2.	Create a new security group (test-ansible-instance for this example)  with configuration set as below (only HTTP and SSH works):
 
-Inline-style: 
 ![alt text](https://github.com/grv231/CloudInfrastructure-devops/blob/master/Images/Security_Groups.png "Security_Groups")
 
 
