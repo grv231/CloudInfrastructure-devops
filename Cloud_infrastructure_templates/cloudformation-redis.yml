@@ -1,0 +1,104 @@
+---
+# Alternative Cloudformation template to spin up redis server using cloudformation yml
+Parameters:
+  SecurityGroupDescription:
+    Description: Security Group Description (Simple parameter)
+    Type: String
+  EnvironmentName:
+    Description: Environment Name
+    Type: String
+    AllowedValues: [development, production]
+    ConstraintDescription: Must be development or production
+  SecurityGroupIngressCIDR:
+    Description: The IP address range that can be used to communicate to the EC2 instances
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 0.0.0.0/0
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+  SecurityGroupPort1:
+    Description: Simple Description of a Number Parameter, with MinValue and MaxValue
+    Type: Number
+    MinValue: 10
+    MaxValue: 65535
+  SecurityGroupPort2:
+    Description: Simple Description of a Number Parameter, with MinValue and MaxValue
+    Type: Number
+    MinValue: 10
+    MaxValue: 65535
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instances. Linked to AWS Parameter
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+  MyVPC:
+    Description: VPC to be used for operating in
+    Type: AWS::EC2::VPC::Id
+
+Mappings:
+  RegionMap:
+    us-west-1:
+      AMI: "ami-925144f2"
+    us-west-2:
+      AMI: "ami-925144f2"
+  EnvironmentToInstanceType:
+    # Smaller instance in development
+    development:
+      instanceType: t2.micro
+    # For spinning up a bigger instance type in production
+    production:
+      instanceType: t2.small
+ 
+    
+
+Resources:
+  MyRedisEC2Instance:
+    # Creating EC2 instance with ubuntu image 
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !FindInMap [EnvironmentToInstanceType, !Ref 'EnvironmentName', instanceType]
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMI]
+      KeyName: !Ref KeyName
+      SubnetId: subnet-87f907dc
+      # 172.31.16.0/20
+      SecurityGroupIds:
+        - !Ref InstanceSecurityGroup
+      Tags:
+        - Key: "name"
+          Value: "MyRedisEC2Instance"
+      UserData:
+        Fn::Base64: |
+           #!/bin/bash    
+           apt-get update
+           apt-get -y upgrade
+           apt-get -y install redis-server
+           systemctl -y enable redis-server.service
+           sudo sed -i "s/127.0.0.1/0.0.0.0/i" /etc/redis/redis.conf
+
+  MyEIP:
+    # Optional to create elastic IP of redis server in case we do keep it in autoscaling group later
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref MyRedisEC2Instance
+
+  InstanceSecurityGroup:
+    # Security group for redis-server
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "RedisSG"
+      GroupDescription: !Ref SecurityGroupDescription
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          CidrIp: !Ref SecurityGroupIngressCIDR
+          FromPort: !Ref SecurityGroupPort1
+          ToPort: !Ref SecurityGroupPort1
+        - IpProtocol: tcp
+          CidrIp: !Ref SecurityGroupIngressCIDR
+          FromPort: !Ref SecurityGroupPort2
+          ToPort: !Ref SecurityGroupPort2
+          IpProtocol: tcp
+      
+      
+
+

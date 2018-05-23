@@ -1,0 +1,123 @@
+---
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_prompt:
+  #user enters the name of the ami image to make an autoscaling group from
+   - name: image
+     prompt: "enter the AMI image id"
+     private: no
+
+  #user enters the name that will be used to name everything else in the architecture
+   - name: architecture
+     prompt: "enter the desired name for your infastructure"
+     private: no
+
+  vars:
+   loadb: "{{architecture}}-lb"
+   auto_sc:  "{{architecture}}_asg"
+   lc: "{{architecture}}_lc"
+
+  vars_files:
+    #contains the AWS access key ID and aws secret key
+    - awsKeys.yml
+    #contains the variables keypair, group, subnetID and regi
+    - regionInfo.yml
+
+  tasks:
+   #load balancer
+   - ec2_elb_lb:
+      aws_access_key: '{{aws_access}}'
+      aws_secret_key: '{{aws_secret}}'
+      security_group_ids: '{{group}}'
+      name: "{{loadb}}"
+      region: "{{regi}}"
+      zones:
+       - us-west-1a
+       - us-west-1b
+      state: present
+      listeners:
+      - protocol: http
+         load_balancer_port: 80
+         instance_port: 80
+
+   #launch config
+   - ec2_lc:
+      aws_access_key: '{{ aws_access }}'
+      aws_secret_key: '{{ aws_secret }}'
+      region:  "{{regi}}"
+      name: '{{lc}}'
+      image_id: '{{ image }}'
+      key_name: "{{ keypair }}"
+      security_groups: '{{ group }}'
+      instance_type: t2.micro
+      volumes:
+       - device_name: /dev/sda1
+         volume_size: 10
+         device_type: gp2
+         iops: 3000
+         delete_on_termination: true
+
+   #auto scaling group
+   - ec2_asg:
+      aws_access_key: '{{ aws_access }}'
+      aws_secret_key: '{{ aws_secret }}'
+      region:  "{{ regi }}"
+      name: '{{ auto_sc }}'
+      load_balancers: '{{ loadb }}'
+      availability_zones: 'us-west-1a'
+      launch_config_name: '{{ lc }}'
+      min_size: 1
+      max_size: 4
+      desired_capacity: 2
+      vpc_zone_identifier: '{{ subnetID }}'
+      wait_for_instances: true
+
+   #adds or removes instances
+   - ec2_scaling_policy:
+      aws_access_key: '{{ aws_access }}'
+      aws_secret_key: '{{ aws_secret }}'
+      region: "{{regi}}"
+      state: present
+      name: "{{item.pol_name}}"
+      adjustment_type: "ChangeInCapacity"
+      asg_name: "{{auto_sc}}"
+      scaling_adjustment: "{{item.changes}}"
+      min_adjustment_step: 1
+      cooldown: 300
+     register: policies
+     with_items:
+      - pol_name: "cpuUP_{{auto_sc}}_policy"
+        changes: +1
+      - pol_name: "cpuDown_{{auto_sc}}_policy"
+        changes: -1
+
+   # cloud watch alarm
+   - ec2_metric_alarm:
+      aws_access_key: '{{aws_access}}'
+      aws_secret_key: '{{aws_secret}}'
+      state: present
+      region: "{{regi}}"
+      name: "{{item.names}}"
+      metric: "CPUUtilization"
+      namespace: "AWS/EC2"
+      statistic: Average
+      comparison: "{{item.compare}}"
+      threshold: "{{item.limits}}"
+      period: 60
+      evaluation_periods: 1
+      unit: "Percent"
+      description: "{{item.desc}}"
+      dimensions: {'AutoScalingGroupName':'{{auto_sc}}'}
+      alarm_actions: "{{item.pol}}"
+     with_items:
+      - names: "cpuUP_{{auto_sc}}"
+        compare: ">="
+        limits: "20.0"
+        desc: "This will alarm when the average cpu usage of the ASG is greater than 20% for 1 minute"
+        pol: "{{policies.results[0]['arn']}}"
+      - names: "cpuDown_{{auto_sc}}"
+        compare: "<="
+        limits: "10.0"
+        desc: "This will alarm when the average cpu usage of the ASG is less than 10% for 1 minute"
+        pol: "{{policies.results[1]['arn']}}"

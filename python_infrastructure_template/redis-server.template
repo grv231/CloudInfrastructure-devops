@@ -1,0 +1,96 @@
+{
+    "Outputs": {
+        "InstanceAccess": {
+            "Description": "Command to access the instance using SSH",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "ssh -i ~/.ssh/Redis-Key.pem ubuntu@",
+                        {
+                            "Fn::GetAtt": [
+                                "dbserver",
+                                "PublicDnsName"
+                            ]
+                        }
+                    ]
+                ]
+            }
+        },
+        "WebUrl": {
+            "Description": "The URL of webserver",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "http://",
+                        {
+                            "Fn::GetAtt": [
+                                "dbserver",
+                                "PublicDnsName"
+                            ]
+                        }
+                    ]
+                ]
+            }
+        }
+    },
+    "Parameters": {
+        "KeyName": {
+            "Description": "Name of SSH keypair that will be used to access the instance",
+            "Type": "String"
+        }
+    },
+    "Resources": {
+        "RedisSg": {
+            "Properties": {
+                "GroupDescription": "Allow access to ports 80, 22 and redis cli to EC2 server",
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "22",
+                        "IpProtocol": "tcp",
+                        "ToPort": "22"
+                    },
+                    {
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "6379",
+                        "IpProtocol": "tcp",
+                        "ToPort": "6379"
+                    }
+                ]
+            },
+            "Type": "AWS::EC2::SecurityGroup"
+        },
+        "dbserver": {
+            "Properties": {
+                "ImageId": "ami-925144f2",
+                "InstanceType": "t2.micro",
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "SecurityGroups": [
+                    {
+                        "Ref": "RedisSg"
+                    }
+                ],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "\n",
+                            [
+                                "#!/bin/bash",
+                                "sudo apt-get update",
+                                "sudo apt-get -y upgrade",
+                                "sudo apt-get -y install redis-server",
+                                "sudo systemctl -y enable redis-server.service",
+                                "sudo sed -i 's/127.0.0.1/0.0.0.0/i' /etc/redis/redis.conf"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Type": "AWS::EC2::Instance"
+        }
+    }
+}

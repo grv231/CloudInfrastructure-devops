@@ -1,0 +1,9 @@
+---
+#your keypair
+keypair: "Redis-Key"
+#your security group
+group: "sg-2cb4a355"
+#the subnet you want to use, found in the vpc menu
+subnetID: "subnet-87f907dc"
+#the region of the subnet you are using
+regi: "us-west-1"
