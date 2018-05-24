@@ -108,6 +108,20 @@ Check the ansible version using: **ansible -–version**
 
 ![alt text](https://github.com/grv231/CloudInfrastructure-devops/blob/master/Images/ShuttingDown_EC2Instances_autoscaled.png "Scaledown_EC2instances")
 
+### :two: Cloud infrastructure setup using Cloudformation YAML template, Python Troposphere and Redis server
+Redis Instance was created on a EC2 server instance using Troposphere python library code on uploaded to Cloudformation as a template from a sample S3 bucket.
+
+**Creation Steps:**
+1.	1.	Firstly, code was developed using python troposphere library. Troposphere was installed using: **sudo pip install troposhere** 
+2.	Code was generated using python-troposphere and saved as a python file (*redis-server.py*).
+3. Python file was converted to a template file using: *python redis-server.py > redis-server.template*
+4. Now in AWS Cloudformation GUI, the template was uploaded and following steps were followed:
+
+ - Create Stack --> Choose a Template (Upload Template to S3) --> Upload redis-server.py --> Keep all options default and keep clicking next and launch
+
+ 
+ 
+
 
 
 
