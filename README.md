@@ -117,9 +117,118 @@ Redis Instance was created on a EC2 server instance using Troposphere python lib
 3. Python file was converted to a template file using: *python redis-server.py > redis-server.template*
 4. Now in AWS Cloudformation GUI, the template was uploaded and following steps were followed:
 
- - Create Stack --> Choose a Template (Upload Template to S3) --> Upload redis-server.py --> Keep all options default and keep clicking next and launch
-
+- Create Stack --> Choose a Template (Upload Template to S3) --> Upload redis-server.py --> Keep all options default and keep clicking next and launch
  
+![alt text](https://github.com/grv231/CloudInfrastructure-devops/blob/master/Images/CloudInfrastructure_progress.png "Cloudformation_infrastructure")
+
+- The stack is generated from the stack above. The output that we get from the Cloudformation script gives us the SSH key that can be used straight away to used to enter the respective box. Moreover, WebURL for the EC2 instance endpoint is also generated that can be used easily to access the instance on web using that endpoint.
+
+![alt text](https://github.com/grv231/CloudInfrastructure-devops/blob/master/Images/Cloudformation_script_output.png "Cloudformation_scriptOutput")
+
+ **Alternative script - AWS CLoudfomration Script in YAML**
+ An alternative script has been created as well to setup a redis server. However, this script gives added flexibility to deploy the infrastructure on various environments such as Production, UAT, development, with added benefit on security groups etc. creation inside the script and since it is the part of AWS stack, Cloudformation script in YAML format offers big benefits in comparison to other tools like Terraform, Packr and Troposphere.
+ 
+The script has been kept in the location **/Cloud_infrastructure_templates/cloudformation-redis.yml** of this project
+ 
+```yaml
+# Alternative Cloudformation template to spin up redis server using cloudformation yml
+Parameters:
+  SecurityGroupDescription:
+    Description: Security Group Description (Simple parameter)
+    Type: String
+  EnvironmentName:
+    Description: Environment Name
+    Type: String
+    AllowedValues: [development, production]
+    ConstraintDescription: Must be development or production
+  SecurityGroupIngressCIDR:
+    Description: The IP address range that can be used to communicate to the EC2 instances
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 0.0.0.0/0
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+  SecurityGroupPort1:
+    Description: Simple Description of a Number Parameter, with MinValue and MaxValue
+    Type: Number
+    MinValue: 10
+    MaxValue: 65535
+  SecurityGroupPort2:
+    Description: Simple Description of a Number Parameter, with MinValue and MaxValue
+    Type: Number
+    MinValue: 10
+    MaxValue: 65535
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instances. Linked to AWS Parameter
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+  MyVPC:
+    Description: VPC to be used for operating in
+    Type: AWS::EC2::VPC::Id
+
+Mappings:
+  RegionMap:
+    us-west-1:
+      AMI: "ami-925144f2"
+    us-west-2:
+      AMI: "ami-925144f2"
+  EnvironmentToInstanceType:
+    # Smaller instance in development
+    development:
+      instanceType: t2.micro
+    # For spinning up a bigger instance type in production
+    production:
+      instanceType: t2.small
+ 
+Resources:
+  MyRedisEC2Instance:
+    # Creating EC2 instance with ubuntu image 
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !FindInMap [EnvironmentToInstanceType, !Ref 'EnvironmentName', instanceType]
+      ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", AMI]
+      KeyName: !Ref KeyName
+      SubnetId: subnet-87f907dc
+      # 172.31.16.0/20
+      SecurityGroupIds:
+        - !Ref InstanceSecurityGroup
+      Tags:
+        - Key: "name"
+          Value: "MyRedisEC2Instance"
+      UserData:
+        Fn::Base64: |
+           #!/bin/bash    
+           apt-get update
+           apt-get -y upgrade
+           apt-get -y install redis-server
+           systemctl -y enable redis-server.service
+           sudo sed -i "s/127.0.0.1/0.0.0.0/i" /etc/redis/redis.conf
+
+  MyEIP:
+    # Optional to create elastic IP of redis server in case we do keep it in autoscaling group later
+    Type: AWS::EC2::EIP
+    Properties:
+      InstanceId: !Ref MyRedisEC2Instance
+
+  InstanceSecurityGroup:
+    # Security group for redis-server
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "RedisSG"
+      GroupDescription: !Ref SecurityGroupDescription
+      VpcId: !Ref MyVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          CidrIp: !Ref SecurityGroupIngressCIDR
+          FromPort: !Ref SecurityGroupPort1
+          ToPort: !Ref SecurityGroupPort1
+        - IpProtocol: tcp
+          CidrIp: !Ref SecurityGroupIngressCIDR
+          FromPort: !Ref SecurityGroupPort2
+          ToPort: !Ref SecurityGroupPort2
+          IpProtocol: tcp
+```
  
 
 
